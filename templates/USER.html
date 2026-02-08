@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Credit Card Fraud Detection</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1>🔍 Credit Card Fraud Detection</h1>
+                    <p class="subtitle">Welcome, {{ username }}!</p>
+                </div>
+                <a href="/logout" style="background: rgba(255,255,255,0.2); color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; font-weight: bold;">🚪 Logout</a>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="form-section">
+                <h2>Quick Check</h2>
+                <p class="info-text">Provide simple transaction details — the system handles the rest.</p>
+
+                <form id="simple-transaction-form">
+                    <div class="form-group">
+                        <label for="amount">Amount</label>
+                        <input id="amount" type="number" step="0.01" placeholder="Transaction amount" required />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="tx-type">Transaction Type</label>
+                        <select id="tx-type">
+                            <option value="Domestic">Domestic</option>
+                            <option value="International">International</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Card Present?</label>
+                        <div style="display:flex; gap:10px;">
+                            <label><input type="radio" name="card_present" value="true" checked /> Yes</label>
+                            <label><input type="radio" name="card_present" value="false" /> No</label>
+                        </div>
+                    </div>
+
+                    <div class="button-group">
+                        <button type="button" class="btn-primary" onclick="makeSimplePrediction()">🚀 Check Transaction</button>
+                        <button type="button" class="btn-secondary" onclick="loadSampleSimple('normal')">📊 Normal Example</button>
+                        <button type="button" class="btn-secondary" onclick="loadSampleSimple('fraud')">⚠️ Fraud Example</button>
+                    </div>
+                </form>
+
+                <div class="loading" id="loading" style="display: none;">
+                    ⏳ Processing prediction...
+                </div>
+            </div>
+
+            <div class="result-section">
+                <h2>Prediction Result</h2>
+                <div class="result-container" id="result-container" style="display: none;">
+                    <div class="result-content" id="result-content"></div>
+                </div>
+                <div class="error-message" id="error-message" style="display: none;"></div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p><strong>API Status:</strong> <span id="api-status">Checking...</span></p>
+            <p><strong>Your Predictions:</strong> <span id="prediction-count">{{ prediction_count }}</span></p>
+            <p>Model: Random Forest | Accuracy: 99.93% | Fraud Detection: 81.57%</p>
+        </div>
+    </div>
+
+    <script>
+        // Check API status on load
+        window.addEventListener('load', checkApiStatus);
+
+        function checkApiStatus() {
+            fetch('/health')
+                .then(r => r.json())
+                .then(d => {
+                    document.getElementById('api-status').textContent = 
+                        d.status === 'ok' ? '✓ Online' : '✗ Offline';
+                })
+                .catch(() => {
+                    document.getElementById('api-status').textContent = '✗ Offline';
+                });
+        }
+
+        function loadSampleSimple(kind) {
+            if (kind === 'normal') {
+                document.getElementById('amount').value = 50.00;
+                document.getElementById('tx-type').value = 'Domestic';
+                document.querySelector('input[name="card_present"][value="true"]').checked = true;
+            } else {
+                document.getElementById('amount').value = 1200.00;
+                document.getElementById('tx-type').value = 'International';
+                document.querySelector('input[name="card_present"][value="false"]').checked = true;
+            }
+            // Clear previous results when loading example
+            document.getElementById('result-container').style.display = 'none';
+            document.getElementById('error-message').style.display = 'none';
+        }
+
+        async function makeSimplePrediction() {
+            const amount = parseFloat(document.getElementById('amount').value || 0);
+            const txType = document.getElementById('tx-type').value;
+            const cardPresent = document.querySelector('input[name="card_present"]:checked').value === 'true';
+            const loading = document.getElementById('loading');
+            const errorDiv = document.getElementById('error-message');
+            const resultDiv = document.getElementById('result-container');
+
+            errorDiv.style.display = 'none';
+            resultDiv.style.display = 'none';
+
+            if (isNaN(amount) || amount < 0) {
+                showError('Please enter a valid amount');
+                return;
+            }
+
+            loading.style.display = 'block';
+
+            const payload = {
+                amount: amount,
+                transaction_type: txType,
+                card_present: cardPresent,
+                time: Math.floor(Date.now() / 1000)
+            };
+
+            try {
+                const resp = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const data = await resp.json();
+                loading.style.display = 'none';
+                if (!resp.ok) {
+                    showError(data.error || 'Prediction failed');
+                    return;
+                }
+
+                const isFraud = data.prediction === 1;
+                resultDiv.className = 'result-container';
+                resultDiv.innerHTML = `
+                    <div style="padding: 20px; border-radius: 8px; background: ${isFraud ? '#fee' : '#efe'}; border-left: 4px solid ${isFraud ? '#e74c3c' : '#27ae60'};">
+                        <h2 style="color: ${isFraud ? '#c0392b' : '#27ae60'}; margin-bottom: 10px;">
+                            ${data.prediction_label}
+                        </h2>
+                        <p><strong>Fraud Probability:</strong> ${(data.fraud_probability * 100).toFixed(2)}%</p>
+                        <p><strong>Note:</strong> ${data.explanation}</p>
+                    </div>
+                    <div id="feedback-controls" style="margin-top:12px; display:flex; gap:8px;">
+                        <button id="feedback-correct" class="btn-primary">This is correct</button>
+                        <button id="feedback-incorrect" class="btn-secondary">This is incorrect</button>
+                        <span id="feedback-msg" style="margin-left:8px; align-self:center; color:#555; display:none;"></span>
+                    </div>
+                `;
+                resultDiv.style.display = 'block';
+                // Save model_features for feedback submission
+                window.__lastModelFeatures = data.model_features || null;
+                window.__lastPrediction = data.prediction;
+
+                // Wire up feedback buttons
+                document.getElementById('feedback-correct').addEventListener('click', () => submitFeedback(true));
+                document.getElementById('feedback-incorrect').addEventListener('click', () => submitFeedback(false));
+                // update prediction count badge
+                const pc = document.getElementById('prediction-count');
+                if (pc) pc.textContent = String(parseInt(pc.textContent || '0') + 1);
+            } catch (err) {
+                loading.style.display = 'none';
+                showError('API error: ' + err.message);
+            }
+        }
+
+        function showError(msg) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = msg;
+            errorDiv.style.display = 'block';
+        }
+
+        // Check API health and update status on page load
+        window.addEventListener('load', async () => {
+            try {
+                const r = await fetch('/health');
+                const j = await r.json();
+                document.getElementById('api-status').textContent = j.status === 'ok' ? '✓ Online' : '✗ Offline';
+            } catch (e) {
+                document.getElementById('api-status').textContent = '✗ Offline';
+            }
+        });
+
+        // Submit feedback to the server
+        async function submitFeedback(isCorrect) {
+            const msgSpan = document.getElementById('feedback-msg');
+            if (!window.__lastModelFeatures) {
+                if (msgSpan) { msgSpan.textContent = 'Feedback unavailable (no features)'; msgSpan.style.display = 'inline'; }
+                return;
+            }
+
+            const prediction = window.__lastPrediction;
+            const actual_label = isCorrect ? prediction : (1 - prediction);
+
+            const payload = {
+                features: window.__lastModelFeatures,
+                prediction: prediction,
+                actual_label: actual_label
+            };
+
+            try {
+                const resp = await fetch('/feedback', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload),
+                    credentials: 'same-origin'
+                });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    if (msgSpan) { msgSpan.textContent = data.error || 'Feedback failed'; msgSpan.style.color = '#c0392b'; msgSpan.style.display = 'inline'; }
+                    return;
+                }
+                if (msgSpan) { msgSpan.textContent = data.message || 'Feedback recorded'; msgSpan.style.color = '#27ae60'; msgSpan.style.display = 'inline'; }
+                // Optionally update admin/feedback stats UI if present
+            } catch (e) {
+                if (msgSpan) { msgSpan.textContent = 'Feedback error'; msgSpan.style.color = '#c0392b'; msgSpan.style.display = 'inline'; }
+            }
+        }
+    </script>
+</body>
+</html>
