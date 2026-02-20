@@ -1,5 +1,14 @@
 # Credit Card Fraud Detection - Full-Stack Application
 
+## 🎥 Demo Video – Fraud Detection Project
+
+Watch the demo here:
+https://youtu.be/ZnP61ZESuII
+
+
+
+
+
 ## 🎯 Overview
 
 A production-ready **fraud detection system** with machine learning backend and web frontend featuring user authentication, admin dashboards, and adaptive learning.
@@ -707,3 +716,4 @@ Uses **Kaggle Credit Card Fraud Detection Dataset**
 **Status**: ✅ **Production Ready**  
 **Last Updated**: February 7, 2026  
 **Accuracy**: 99.93% | **Fraud Detection**: 81.57%
+
